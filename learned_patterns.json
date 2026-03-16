@@ -1,0 +1,6 @@
+[
+  "\\b(ignore|forget|disregard|override)\\b.{0,20}\\b(instructions?|rules?|guidelines?)\\b",
+  "\\b(you are now|act as|pretend to be|simulate)\\b",
+  "\\b(no restrictions?|no limits?|unrestricted)\\b",
+  "\\b(system|admin|root|developer)\\b.{0,10}\\b(mode|access|override)\\b"
+]

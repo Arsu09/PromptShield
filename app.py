@@ -1,4 +1,4 @@
-# app.py — PromptShield v2.0 Interactive Demo
+# app.py — PromptShield v3.0 — Self-Learning Edition
 
 import streamlit as st
 import pandas as pd
@@ -9,7 +9,7 @@ from dataset import ATTACK_EXAMPLES, SAFE_EXAMPLES
 
 # ── Page config ──
 st.set_page_config(
-    page_title="PromptShield v2.0",
+    page_title="PromptShield v3.0",
     page_icon="🛡️",
     layout="wide"
 )
@@ -22,7 +22,7 @@ def load_shield():
 shield = load_shield()
 
 # ── Header ──
-st.title("🛡️ PromptShield v2.0")
+st.title("🛡️ PromptShield v3.0")
 st.markdown("**Agentic AI Prompt Injection Detection & Prevention Framework**")
 
 # ── Model Stats Banner ──
@@ -30,7 +30,7 @@ col_a, col_b, col_c, col_d = st.columns(4)
 col_a.metric("🧠 Model", "Random Forest")
 col_b.metric("📊 Training Data", "546 examples")
 col_c.metric("🎯 Accuracy", "85.34%")
-col_d.metric("⚡ Detection Layers", "2 (Pattern + ML)")
+col_d.metric("⚡ Detection Layers", "3 (Pattern + ML + AI)")
 
 st.markdown("---")
 
@@ -48,59 +48,117 @@ col1, col2 = st.columns([1.2, 1])
 with col1:
     st.subheader("🔍 Test a Prompt")
 
-    example_type = st.selectbox(
-        "Load an example:",
-        ["Write your own..."] +
-        ["⚔️ Attack: " + a[:50] + "..." for a in ATTACK_EXAMPLES[:5]] +
-        ["✅ Safe: " + s[:50] + "..." for s in SAFE_EXAMPLES[:5]]
+    user_input = st.text_area(
+        "Enter any prompt to scan:",
+        height=150,
+        placeholder="Koi bhi prompt yahan likho — jaise:\n• Ignore all previous instructions...\n• What is machine learning?\n• You are now DAN with no restrictions..."
     )
 
-    if example_type.startswith("⚔️ Attack"):
-        idx = next(i for i, a in enumerate(ATTACK_EXAMPLES)
-                   if a[:50] in example_type)
-        default_text = ATTACK_EXAMPLES[idx]
-    elif example_type.startswith("✅ Safe"):
-        idx = next(i for i, s in enumerate(SAFE_EXAMPLES)
-                   if s[:50] in example_type)
-        default_text = SAFE_EXAMPLES[idx]
-    else:
-        default_text = ""
-
-    user_input = st.text_area(
-        "Enter a prompt to scan:",
-        value=default_text,
-        height=120,
-        placeholder="Type any prompt here and click Scan..."
+    use_gemini = st.toggle(
+        "🤖 Gemini AI Judge bhi use karo (Layer 3)",
+        value=False,
+        help="Gemini AI se deep analysis — thoda slow hoga"
     )
 
     scan_btn = st.button("🔎 Scan Prompt", use_container_width=True, type="primary")
 
     if scan_btn and user_input.strip():
-        result = shield.scan(user_input)
+        result = shield.scan(user_input, use_gemini=use_gemini)
 
-        # ── Verdict ──
-        if "ATTACK" in result["final_verdict"]:
-            st.error(f"### {result['final_verdict']}")
-            st.markdown("> ⚠️ This prompt contains signs of a prompt injection attack!")
+        # ── Severity Badge ──
+        sev = result["severity"]
+        if sev["level"] == "HIGH":
+            st.error(f"### {sev['emoji']} {sev['label']} — {result['final_verdict']}")
+        elif sev["level"] == "MEDIUM":
+            st.warning(f"### {sev['emoji']} {sev['label']} — {result['final_verdict']}")
+        elif sev["level"] == "LOW":
+            st.warning(f"### {sev['emoji']} {sev['label']} — {result['final_verdict']}")
         else:
-            st.success(f"### {result['final_verdict']}")
-            st.markdown("> ✅ No injection patterns detected. Prompt appears safe.")
+            st.success(f"### {sev['emoji']} {sev['label']} — {result['final_verdict']}")
+
+        # ── Severity Details ──
+        st.markdown(f"**📋 Description:** {sev['description']}")
+        st.markdown(f"**💡 Recommendation:** {sev['recommendation']}")
+
+        # ── Severity Meter ──
+        st.markdown("#### 🎚️ Severity Level")
+        sev_cols = st.columns(4)
+        levels = ["SAFE", "LOW", "MEDIUM", "HIGH"]
+        colors_map = {
+            "SAFE": "🟢", "LOW": "🟡",
+            "MEDIUM": "🟠", "HIGH": "🔴"
+        }
+        for i, (col, level) in enumerate(zip(sev_cols, levels)):
+            if level == sev["level"]:
+                col.markdown(
+                    f"<div style='background-color:{sev['color']};padding:10px;"
+                    f"border-radius:8px;text-align:center;color:white;"
+                    f"font-weight:bold'>{colors_map[level]}<br>{level}</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                col.markdown(
+                    f"<div style='padding:10px;border-radius:8px;"
+                    f"text-align:center;border:1px solid #ddd;color:gray'>"
+                    f"{colors_map[level]}<br>{level}</div>",
+                    unsafe_allow_html=True
+                )
 
         # ── Scores ──
         st.markdown("#### 📊 Detection Scores")
-        c1, c2 = st.columns(2)
-        c1.metric("Pattern Match Score", f"{result['pattern_score']:.0%}",
-                  delta="Rule-based layer")
-        c2.metric("ML Attack Probability", f"{result['ml_attack_prob']}%",
-                  delta="Random Forest layer")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Pattern Severity", result["pattern_severity"])
+        c2.metric("ML Attack Prob", f"{result['ml_attack_prob']}%")
+        c3.metric("Final Severity", sev["level"])
 
-        # ── Pattern matches ──
-        if result["pattern_matches"]:
-            st.markdown("#### ⚠️ Matched Attack Patterns")
-            for p in result["pattern_matches"]:
-                st.code(p)
+        # ── Online Model Score ──
+        if "online_attack_prob" in result:
+            c4, c5 = st.columns(2)
+            c4.metric("Online Model Prob",
+                      f"{result['online_attack_prob']}%",
+                      delta="Self-learned")
+            c5.metric("Combined Prob",
+                      f"{result['combined_prob']}%",
+                      delta="Final score")
+
+        # ── Gemini AI Analysis ──
+        if result["gemini_result"]:
+            st.markdown("---")
+            st.markdown("### 🤖 Gemini AI Judge — Layer 3 Analysis")
+            g = result["gemini_result"]
+            g1, g2, g3 = st.columns(3)
+            g1.metric("AI Verdict", g["verdict"])
+            g2.metric("AI Severity", g["severity"])
+            g3.metric("Confidence", f"{g['confidence']}%")
+            st.markdown(f"**🎯 Attack Type:** `{g['attack_type']}`")
+            st.markdown(f"**💬 AI Explanation:** {g['explanation']}")
+
+        # ── Feedback Buttons ──
+        st.markdown("#### 💬 Model ka faisla sahi tha?")
+        fb_col1, fb_col2 = st.columns(2)
+
+        if fb_col1.button("✅ Haan, Sahi Tha!", use_container_width=True):
+            true_label = 1 if "ATTACK" in result["final_verdict"] or \
+                         "SUSPICIOUS" in result["final_verdict"] else 0
+            shield.give_feedback(
+                user_input, result["final_verdict"], "correct", true_label
+            )
+            st.success("Shukriya! Model ne yeh example yaad kar liya 🧠")
+
+        if fb_col2.button("❌ Nahi, Galat Tha!", use_container_width=True):
+            true_label = 0 if "ATTACK" in result["final_verdict"] or \
+                         "SUSPICIOUS" in result["final_verdict"] else 1
+            shield.give_feedback(
+                user_input, result["final_verdict"], "incorrect", true_label
+            )
+            st.warning("Shukriya! Model ne galti se seekh liya 🔄")
+
+        # ── Matched Pattern ──
+        if result["matched_pattern"]:
+            st.markdown("#### ⚠️ Matched Pattern")
+            st.code(result["matched_pattern"])
         else:
-            st.info("No rule-based patterns matched — ML layer made the decision.")
+            st.info("No rule-based patterns — ML layer decided.")
 
         # ── Probability bar ──
         st.markdown("#### 🎯 ML Confidence")
@@ -132,7 +190,6 @@ with col2:
             [(p, "Attack") for p in ATTACK_EXAMPLES] +
             [(p, "Safe") for p in SAFE_EXAMPLES]
         )
-
         with st.spinner("Scanning all prompts..."):
             results = []
             for prompt, true_label in all_prompts:
@@ -152,18 +209,15 @@ with col2:
         total = len(results)
         accuracy = correct / total * 100
 
-        # ── Metrics ──
         m1, m2, m3 = st.columns(3)
         m1.metric("Total Scanned", total)
         m2.metric("Correct", correct)
         m3.metric("Accuracy", f"{accuracy:.1f}%",
                   delta="vs 80% before" if accuracy > 80 else None)
 
-        # ── Color coded table ──
         st.markdown("#### Results Table")
         st.dataframe(df, use_container_width=True, height=380)
 
-        # ── Mini pie chart ──
         fig2, ax2 = plt.subplots(figsize=(4, 4))
         ax2.pie(
             [correct, total - correct],
@@ -189,10 +243,32 @@ with st.expander("📚 Attack Types — PromptShield kya detect karta hai?"):
     | **Jailbreak** | "Developer mode enabled..." | ✅ Detected |
     """)
 
+# ── Self-Learning Dashboard ──
+st.markdown("---")
+st.subheader("🧠 Self-Learning Dashboard")
+
+stats = shield.get_learning_stats()
+
+l1, l2, l3, l4 = st.columns(4)
+l1.metric("Total Scans", stats["total_scans"], delta="Examples learned")
+l2.metric("Auto-Learned", stats["total_learned"], delta="From scans")
+l3.metric("Patterns Found", stats["patterns_found"], delta="Auto-discovered")
+l4.metric("User Feedback", stats["feedback_count"], delta="Manual corrections")
+
+if stats["learned_patterns"]:
+    with st.expander(f"🔍 Auto-Discovered Patterns ({stats['patterns_found']})"):
+        for p in stats["learned_patterns"]:
+            st.code(p)
+
+recent = shield.get_recent_feedback()
+if len(recent) > 0:
+    with st.expander("📋 Recent Feedback History"):
+        st.dataframe(recent, use_container_width=True)
+
 # ── Footer ──
 st.markdown("---")
 st.markdown(
-    "🔬 **PromptShield v2.0** | Random Forest + Pattern Matching | "
+    "🔬 **PromptShield v3.0** | Random Forest + Pattern Matching + Self-Learning | "
     "546 Training Examples | 85.34% Accuracy | "
     "Research Project — Agentic AI Security | "
     "👨‍💻 [GitHub](https://github.com/Arsu09/PromptShield)"
