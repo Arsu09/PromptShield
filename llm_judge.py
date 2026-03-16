@@ -3,7 +3,7 @@
 import google.generativeai as genai
 
 # ── Apni API key yahan paste karo ──
-GEMINI_API_KEY = "AIzaSyAVPC49wHdGnAV6rX5J_EinMxrlUfDs8xQ"
+GEMINI_API_KEY = "AIzaSyDX4PAIhBJUY0QM0T14SHeRHRBokOz5ZdE"
 
 genai.configure(api_key=GEMINI_API_KEY)
 
