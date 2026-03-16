@@ -1,13 +1,13 @@
-# detector.py — PromptShield Detection Engine
+# detector.py — PromptShield v2.0 — Real Dataset + Random Forest
 
 import re
+import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline
-from dataset import get_training_data
 
 # ─────────────────────────────────────────
-# LAYER 1: Pattern Matcher (Fast Rules)
+# LAYER 1: Pattern Matcher
 # ─────────────────────────────────────────
 
 ATTACK_PATTERNS = [
@@ -24,11 +24,9 @@ ATTACK_PATTERNS = [
     r"(from now on|starting now|henceforth) you (are|will|must)",
     r"###.*(end|override|system|new)###",
     r"\[system\]",
-    r"repeat (the word|this) .{1,30} (times|\d+)",
 ]
 
 def pattern_scan(text: str) -> dict:
-    """Fast rule-based detection"""
     text_lower = text.lower()
     matched = []
     for pattern in ATTACK_PATTERNS:
@@ -42,21 +40,32 @@ def pattern_scan(text: str) -> dict:
     }
 
 # ─────────────────────────────────────────
-# LAYER 2: ML Classifier (TF-IDF + LR)
+# LAYER 2: Random Forest (New & Better!)
 # ─────────────────────────────────────────
 
 class MLDetector:
     def __init__(self):
         self.model = Pipeline([
             ('tfidf', TfidfVectorizer(ngram_range=(1, 3), max_features=5000)),
-            ('clf', LogisticRegression(max_iter=1000))
+            ('clf', RandomForestClassifier(n_estimators=100, random_state=42))
         ])
         self._train()
 
     def _train(self):
-        texts, labels = get_training_data()
-        self.model.fit(texts, labels)
-        print("✅ ML model trained!")
+        # Real dataset use karo
+        try:
+            train_df = pd.read_csv("train_dataset.csv")
+            X = train_df["text"]
+            y = train_df["label"]
+            print(f"✅ Real dataset loaded: {len(X)} examples")
+        except:
+            # Fallback to basic examples
+            from dataset import get_training_data
+            X, y = get_training_data()
+            print("⚠️ Using basic dataset")
+
+        self.model.fit(X, y)
+        print("✅ Random Forest model trained!")
 
     def predict(self, text: str) -> dict:
         prob = self.model.predict_proba([text])[0]
@@ -72,16 +81,13 @@ class MLDetector:
 
 class PromptShield:
     def __init__(self):
-        print("🛡️ Loading PromptShield...")
+        print("🛡️ Loading PromptShield v2.0...")
         self.ml = MLDetector()
 
     def scan(self, prompt: str) -> dict:
-        # Layer 1
         pattern_result = pattern_scan(prompt)
-        # Layer 2
         ml_result = self.ml.predict(prompt)
 
-        # Combined decision
         if pattern_result["flagged"] or ml_result["verdict"] == "ATTACK":
             final = "🚨 ATTACK DETECTED"
             color = "red"
